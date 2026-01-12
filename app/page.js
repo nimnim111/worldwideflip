@@ -248,23 +248,38 @@ const buildMapPoint = (country) => {
   const y = 12 + ((hash * 7) % 70);
   return { x, y };
 };
+const countries = [
+  { code: "US", name: "United States", x: 24, y: 33 },
+  { code: "CA", name: "Canada", x: 20, y: 20 },
+  { code: "BR", name: "Brazil", x: 34, y: 62 },
+  { code: "GB", name: "United Kingdom", x: 48, y: 26 },
+  { code: "FR", name: "France", x: 50, y: 32 },
+  { code: "NG", name: "Nigeria", x: 56, y: 52 },
+  { code: "ZA", name: "South Africa", x: 56, y: 78 },
+  { code: "IN", name: "India", x: 68, y: 48 },
+  { code: "JP", name: "Japan", x: 82, y: 36 },
+  { code: "AU", name: "Australia", x: 82, y: 76 }
+];
 
 const starterFlips = [
   {
     id: 1,
     country: "United States",
+    country: "US",
     title: "Brooklyn rooftop kick",
     notes: "Sunset backflip over the skyline."
   },
   {
     id: 2,
     country: "France",
+    country: "FR",
     title: "Paris bridge spin",
     notes: "Landed near the Seine with crowd cheers."
   },
   {
     id: 3,
     country: "Japan",
+    country: "JP",
     title: "Osaka street jam",
     notes: "Perfect rotation with the crew."
   }
@@ -314,6 +329,24 @@ export default function Home() {
     return backflips.filter(
       (flip) => normalizeCountry(flip.country) === normalized
     );
+  const [selectedCountry, setSelectedCountry] = useState("US");
+  const [formState, setFormState] = useState({
+    country: "US",
+    title: "",
+    notes: ""
+  });
+
+  const countriesWithFlips = useMemo(() => {
+    const set = new Set(backflips.map((flip) => flip.country));
+    return set;
+  }, [backflips]);
+
+  const percentCovered = Math.round(
+    (countriesWithFlips.size / countries.length) * 100
+  );
+
+  const selectedDetails = useMemo(() => {
+    return backflips.filter((flip) => flip.country === selectedCountry);
   }, [backflips, selectedCountry]);
 
   const handleSubmit = (event) => {
@@ -325,12 +358,14 @@ export default function Home() {
     const matchedCountry = findCountryMatch(formState.country);
     if (!matchedCountry) {
       setCountryError("Pick a country from the list to log a flip.");
+    if (!formState.title.trim()) {
       return;
     }
 
     const newFlip = {
       id: Date.now(),
       country: matchedCountry,
+      country: formState.country,
       title: formState.title.trim(),
       notes: formState.notes.trim()
     };
@@ -343,6 +378,12 @@ export default function Home() {
       notes: ""
     });
     setCountryError("");
+    setSelectedCountry(formState.country);
+    setFormState({
+      country: formState.country,
+      title: "",
+      notes: ""
+    });
   };
 
   return (
@@ -361,6 +402,7 @@ export default function Home() {
           <h2>Global coverage</h2>
           <p>
             {countriesWithFlips.size} of {TOTAL_COUNTRIES} countries have at
+            {countriesWithFlips.size} of {countries.length} countries have at
             least one backflip logged.
           </p>
           <div className="progress" aria-hidden="true">
@@ -381,6 +423,11 @@ export default function Home() {
                 id="country"
                 list="country-list"
                 placeholder="Type a country"
+          <form onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="country">Country</label>
+              <select
+                id="country"
                 value={formState.country}
                 onChange={(event) =>
                   setFormState((prev) => ({
@@ -395,6 +442,13 @@ export default function Home() {
                   <option key={country} value={country} />
                 ))}
               </datalist>
+              >
+                {countries.map((country) => (
+                  <option key={country.code} value={country.code}>
+                    {country.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor="title">Backflip name</label>
@@ -425,15 +479,7 @@ export default function Home() {
                 }
               />
             </div>
-            {countryError ? (
-              <p style={{ color: "#b91c1c", fontWeight: 600 }}>
-                {countryError}
-              </p>
-            ) : null}
-            <button
-              type="submit"
-              disabled={!formState.title.trim() || !formState.country.trim()}
-            >
+            <button type="submit" disabled={!formState.title.trim()}>
               Log backflip
             </button>
           </form>
@@ -474,20 +520,19 @@ export default function Home() {
               opacity="0.55"
             />
           </svg>
-          {flipCountries.map((country) => {
-            const isActive =
-              normalizeCountry(country) === normalizeCountry(selectedCountry);
-            const point = buildMapPoint(country);
+          {countries.map((country) => {
+            const isActive = country.code === selectedCountry;
+            const hasFlip = countriesWithFlips.has(country.code);
             return (
               <button
-                key={country}
+                key={country.code}
                 type="button"
                 className={`map-pin${isActive ? " active" : ""}`}
-                style={{ left: `${point.x}%`, top: `${point.y}%` }}
-                onClick={() => setSelectedCountry(country)}
+                style={{ left: `${country.x}%`, top: `${country.y}%` }}
+                onClick={() => setSelectedCountry(country.code)}
               >
-                <span>{country.slice(0, 2).toUpperCase()}</span>
-                Flip
+                <span>{country.code}</span>
+                {hasFlip ? "Flip" : "New"}
               </button>
             );
           })}
@@ -496,6 +541,7 @@ export default function Home() {
         <div className="card">
           <h2>
             {selectedCountry}
+            {countries.find((country) => country.code === selectedCountry)?.name}
           </h2>
           {selectedDetails.length ? (
             <div className="backflip-list">
