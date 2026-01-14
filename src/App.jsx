@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import { Globe, Search, LogOut, ShieldCheck, X } from "lucide-react";
 import { feature } from "topojson-client";
+import { upload } from "@vercel/blob/client";
 
 /* =====================
- *   FIREBASE (AUTH + FIRESTORE)
+ * FIREBASE (AUTH + FIRESTORE)
  * ===================== */
 import { initializeApp } from "firebase/app";
 import {
@@ -24,6 +25,9 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 
+/* =====================
+ * FIREBASE CONFIG
+ * ===================== */
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -37,21 +41,21 @@ const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
 /* =====================
- *   CONFIG
+ * CONFIG
  * ===================== */
 const GEO_URL = "https://unpkg.com/world-atlas@2/countries-110m.json";
 const ADMIN_EMAILS = ["ardenwoodso2017@gmail.com"];
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 
 /* =====================
- *   HELPERS
+ * HELPERS
  * ===================== */
 function extractCountriesFromTopo(topo) {
   try {
     const geojson = feature(topo, topo.objects.countries);
     return geojson.features.map((f) => ({
       code: String(f.id),
-                                        name: f.properties?.name || "Unknown",
+      name: f.properties?.name || "Unknown",
     }));
   } catch {
     return [];
@@ -59,7 +63,7 @@ function extractCountriesFromTopo(topo) {
 }
 
 /* =====================
- *   MAIN
+ * MAIN
  * ===================== */
 export default function BackflipTracker() {
   const [topo, setTopo] = useState(null);
@@ -79,11 +83,15 @@ export default function BackflipTracker() {
   const [error, setError] = useState("");
 
   /* =====================
-   *     AUTH
-   *  ===================== */
+   * AUTH
+   * ===================== */
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
-      if (!u) return setUser(null);
+      if (!u) {
+        setUser(null);
+        setShowAdmin(false);
+        return;
+      }
       setUser({
         uid: u.uid,
         name: u.displayName || "",
@@ -98,8 +106,8 @@ export default function BackflipTracker() {
   const logout = () => signOut(auth);
 
   /* =====================
-   *     MAP + DATA
-   *  ===================== */
+   * MAP + DATA
+   * ===================== */
   useEffect(() => {
     (async () => {
       const res = await fetch(GEO_URL);
@@ -122,11 +130,11 @@ export default function BackflipTracker() {
   }, []);
 
   /* =====================
-   *     STATS
-   *  ===================== */
+   * STATS
+   * ===================== */
   const approvedCount = useMemo(
     () => Object.values(submissions).filter((s) => s.status === "approved").length,
-                                [submissions]
+    [submissions]
   );
 
   const totalCount = countries.length || 1;
@@ -139,8 +147,8 @@ export default function BackflipTracker() {
   }, [search, countries]);
 
   /* =====================
-   *     COUNTRY CLICK
-   *  ===================== */
+   * COUNTRY CLICK
+   * ===================== */
   const openCountry = (code, name) => {
     setSelectedCountry({ code, name });
     setVideoFile(null);
@@ -156,8 +164,8 @@ export default function BackflipTracker() {
   };
 
   /* =====================
-   *     FILE VALIDATION
-   *  ===================== */
+   * FILE VALIDATION
+   * ===================== */
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -173,8 +181,8 @@ export default function BackflipTracker() {
   };
 
   /* =====================
-   *     SUBMIT → VERCEL BLOB
-   *  ===================== */
+   * SUBMIT (DIRECT TO BLOB)
+   * ===================== */
   const submitForApproval = async () => {
     if (!user) return setError("Sign in required");
     if (!videoFile) return setError("Select a video");
@@ -186,45 +194,25 @@ export default function BackflipTracker() {
     setError("");
 
     try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": videoFile.type,
-        },
-        body: videoFile,
-      });
-
-      // 🔐 SAFE RESPONSE HANDLING
-      const raw = await res.text();
-
-      if (!res.ok) {
-        throw new Error(raw || "Upload failed");
-      }
-
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        throw new Error("Upload API returned invalid or empty JSON");
-      }
-
-      if (!parsed?.url) {
-        throw new Error("Upload succeeded but no URL returned");
-      }
+      const blob = await upload(
+        `backflips/${selectedCountry.code}-${Date.now()}.mp4`,
+        videoFile,
+        {
+          access: "public",
+          handleUploadUrl: "/api/blob",
+        }
+      );
 
       const payload = {
         country: selectedCountry.name,
         uploader: user.name || "",
         email: user.email || "",
-        videoUrl: parsed.url,
+        videoUrl: blob.url,
         status: "pending",
         createdAt: Date.now(),
       };
 
-      await setDoc(
-        doc(db, "backflips", selectedCountry.code),
-                   payload
-      );
+      await setDoc(doc(db, "backflips", selectedCountry.code), payload);
 
       setSubmissions((p) => ({
         ...p,
@@ -239,10 +227,9 @@ export default function BackflipTracker() {
     }
   };
 
-
   /* =====================
-   *     ADMIN ACTIONS
-   *  ===================== */
+   * ADMIN ACTIONS
+   * ===================== */
   const approve = async (code) => {
     await updateDoc(doc(db, "backflips", code), { status: "approved" });
     setSubmissions((p) => ({
@@ -264,145 +251,145 @@ export default function BackflipTracker() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-300 via-purple-200 to-blue-200 p-6">
-    {/* HEADER */}
-    <div className="flex justify-between bg-white/80 rounded-2xl p-4 mb-4">
-    <div className="flex gap-2 items-center">
-    <Globe /> <b>Global Backflip Tracker</b>
-    </div>
-    <div className="flex gap-2 items-center">
-    {!user && <button onClick={login}>Sign in</button>}
-    {user && (
-      <>
-      {isAdmin && (
-        <button
-        onClick={() => setShowAdmin((v) => !v)}
-        className="px-3 py-1 rounded-xl bg-emerald-600 text-white flex gap-1"
-        >
-        <ShieldCheck className="w-4 h-4" /> Admin
-        </button>
-      )}
-      <button onClick={logout}><LogOut /></button>
-      </>
-    )}
-    </div>
-    </div>
+      {/* HEADER */}
+      <div className="flex justify-between bg-white/80 rounded-2xl p-4 mb-4">
+        <div className="flex gap-2 items-center">
+          <Globe /> <b>Global Backflip Tracker</b>
+        </div>
+        <div className="flex gap-2 items-center">
+          {!user && <button onClick={login}>Sign in</button>}
+          {user && (
+            <>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAdmin((v) => !v)}
+                  className="px-3 py-1 rounded-xl bg-emerald-600 text-white flex gap-1"
+                >
+                  <ShieldCheck className="w-4 h-4" /> Admin
+                </button>
+              )}
+              <button onClick={logout}><LogOut /></button>
+            </>
+          )}
+        </div>
+      </div>
 
-    {/* SEARCH */}
-    <div className="bg-white rounded-xl p-3 mb-4 flex gap-2">
-    <Search />
-    <input
-    value={search}
-    onChange={(e) => setSearch(e.target.value)}
-    placeholder="Search country"
-    className="flex-1"
-    />
-    </div>
-
-    {/* STATS */}
-    <div className="grid grid-cols-3 gap-4 mb-4">
-    <Stat label="Approved" value={approvedCount} />
-    <Stat label="Total Countries" value={totalCount} />
-    <Stat label="Completion" value={`${completionPercent}%`} />
-    </div>
-
-    {/* MAP */}
-    <div className="bg-white rounded-2xl p-4">
-    <ComposableMap projectionConfig={{ scale: 155 }}>
-    <Geographies geography={topo}>
-    {({ geographies }) =>
-    geographies.map((geo) => {
-      const code = String(geo.id);
-      const entry = submissions[code];
-      let fill = "#c7d2fe";
-      if (entry?.status === "approved") fill = "#34d399";
-      if (entry?.status === "pending") fill = "#facc15";
-      return (
-        <Geography
-        key={geo.rsmKey}
-        geography={geo}
-        fill={fill}
-        onClick={() =>
-          openCountry(code, geo.properties?.name || "")
-        }
+      {/* SEARCH */}
+      <div className="bg-white rounded-xl p-3 mb-4 flex gap-2">
+        <Search />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search country"
+          className="flex-1"
         />
-      );
-    })
-    }
-    </Geographies>
-    </ComposableMap>
-    </div>
+      </div>
 
-    {/* MODAL */}
-    {showModal && selectedCountry && (
-      <Modal title={selectedCountry.name} onClose={closeModal}>
-      {error && <p className="text-red-600">{error}</p>}
-      {!submissions[selectedCountry.code] && (
-        <>
-        <input type="file" accept="video/*" onChange={handleFile} />
-        <button
-        disabled={uploading}
-        onClick={submitForApproval}
-        className="w-full bg-indigo-600 text-white rounded-xl p-3 mt-2"
-        >
-        {uploading ? "Uploading…" : "Submit"}
-        </button>
-        </>
-      )}
-      </Modal>
-    )}
+      {/* STATS */}
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <Stat label="Approved" value={approvedCount} />
+        <Stat label="Total Countries" value={totalCount} />
+        <Stat label="Completion" value={`${completionPercent}%`} />
+      </div>
 
-    {/* ADMIN PANEL */}
-    {showAdmin && isAdmin && (
-      <Modal title="Admin Panel" onClose={() => setShowAdmin(false)}>
-      {Object.entries(submissions)
-        .filter(([, s]) => s.status === "pending")
-        .map(([code, s]) => (
-          <div key={code} className="border rounded-xl p-3 mb-3">
-          <b>{s.country}</b>
-          <video src={s.videoUrl} controls className="w-full my-2" />
-          <div className="flex gap-2">
-          <AdminBtn ok onClick={() => approve(code)}>Approve</AdminBtn>
-          <AdminBtn onClick={() => reject(code)}>✕ Reject</AdminBtn>
-          </div>
-          </div>
-        ))}
+      {/* MAP */}
+      <div className="bg-white rounded-2xl p-4">
+        <ComposableMap projectionConfig={{ scale: 155 }}>
+          <Geographies geography={topo}>
+            {({ geographies }) =>
+              geographies.map((geo) => {
+                const code = String(geo.id);
+                const entry = submissions[code];
+                let fill = "#c7d2fe";
+                if (entry?.status === "approved") fill = "#34d399";
+                if (entry?.status === "pending") fill = "#facc15";
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={fill}
+                    onClick={() =>
+                      openCountry(code, geo.properties?.name || "")
+                    }
+                  />
+                );
+              })
+            }
+          </Geographies>
+        </ComposableMap>
+      </div>
+
+      {/* MODAL */}
+      {showModal && selectedCountry && (
+        <Modal title={selectedCountry.name} onClose={closeModal}>
+          {error && <p className="text-red-600">{error}</p>}
+          {!submissions[selectedCountry.code] && (
+            <>
+              <input type="file" accept="video/*" onChange={handleFile} />
+              <button
+                disabled={uploading}
+                onClick={submitForApproval}
+                className="w-full bg-indigo-600 text-white rounded-xl p-3 mt-2"
+              >
+                {uploading ? "Uploading…" : "Submit"}
+              </button>
+            </>
+          )}
         </Modal>
-    )}
+      )}
+
+      {/* ADMIN PANEL */}
+      {showAdmin && isAdmin && (
+        <Modal title="Admin Panel" onClose={() => setShowAdmin(false)}>
+          {Object.entries(submissions)
+            .filter(([, s]) => s.status === "pending")
+            .map(([code, s]) => (
+              <div key={code} className="border rounded-xl p-3 mb-3">
+                <b>{s.country}</b>
+                <video src={s.videoUrl} controls className="w-full my-2" />
+                <div className="flex gap-2">
+                  <AdminBtn ok onClick={() => approve(code)}>Approve</AdminBtn>
+                  <AdminBtn onClick={() => reject(code)}>✕ Reject</AdminBtn>
+                </div>
+              </div>
+            ))}
+        </Modal>
+      )}
     </div>
   );
 }
 
 /* =====================
- *   UI HELPERS
+ * UI HELPERS
  * ===================== */
 const Stat = ({ label, value }) => (
   <div className="bg-white rounded-xl p-4">
-  <div className="text-xs text-gray-500">{label}</div>
-  <div className="text-2xl font-bold">{value}</div>
+    <div className="text-xs text-gray-500">{label}</div>
+    <div className="text-2xl font-bold">{value}</div>
   </div>
 );
 
 const AdminBtn = ({ ok, children, ...p }) => (
   <button
-  {...p}
-  className={`flex-1 py-2 rounded-xl font-semibold ${
-    ok ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
-  }`}
+    {...p}
+    className={`flex-1 py-2 rounded-xl font-semibold ${
+      ok ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+    }`}
   >
-  {children}
+    {children}
   </button>
 );
 
 function Modal({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center">
-    <div className="bg-white rounded-2xl p-4 max-w-lg w-full">
-    <div className="flex justify-between mb-2">
-    <b>{title}</b>
-    <button onClick={onClose}><X /></button>
-    </div>
-    {children}
-    </div>
+      <div className="bg-white rounded-2xl p-4 max-w-lg w-full">
+        <div className="flex justify-between mb-2">
+          <b>{title}</b>
+          <button onClick={onClose}><X /></button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
