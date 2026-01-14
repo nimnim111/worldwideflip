@@ -1,16 +1,16 @@
 import { handleUpload } from "@vercel/blob/client";
 
 export const config = {
-  runtime: "edge",
+  runtime: "nodejs",
 };
 
-export default async function handler(request) {
-  if (request.method !== "POST") {
+export default async function handler(req) {
+  if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
   return handleUpload({
-    request,
+    request: req,
     onBeforeGenerateToken: async () => {
       return {
         allowedContentTypes: ["video/*"],
