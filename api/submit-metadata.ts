@@ -13,6 +13,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { countryCode, countryName, uploader, email, path } = req.body;
 
+  if (!path) {
+    return res.status(400).send("Missing storage path");
+  }
+
   const { data: publicData } = supabase.storage
     .from("backflips")
     .getPublicUrl(path);
