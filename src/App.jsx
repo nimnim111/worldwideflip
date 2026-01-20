@@ -55,7 +55,7 @@ function extractCountriesFromTopo(topo) {
     const geojson = feature(topo, topo.objects.countries);
     return geojson.features.map((f) => ({
       code: String(f.id),
-      name: f.properties?.name || "Unknown",
+                                        name: f.properties?.name || "Unknown",
     }));
   } catch {
     return [];
@@ -134,7 +134,7 @@ export default function BackflipTracker() {
    * ===================== */
   const approvedCount = useMemo(
     () => Object.values(submissions).filter((s) => s.status === "approved").length,
-    [submissions]
+                                [submissions]
   );
 
   const totalCount = countries.length || 1;
@@ -184,48 +184,32 @@ export default function BackflipTracker() {
    * SUBMIT (DIRECT TO BLOB)
    * ===================== */
   const submitForApproval = async () => {
-    if (!user) return setError("Sign in required");
-    if (!videoFile) return setError("Select a video");
-    if (!selectedCountry) return;
-    if (submissions[selectedCountry.code])
-      return setError("Already submitted");
+    if (!user || !videoFile || !selectedCountry) return;
+
+    const form = new FormData();
+    form.append("video", videoFile);
+    form.append("countryCode", selectedCountry.code);
+    form.append("countryName", selectedCountry.name);
+    form.append("email", user.email);
+    form.append("uploader", user.name);
 
     setUploading(true);
-    setError("");
 
     try {
-      const blob = await upload(
-        `backflips/${selectedCountry.code}-${Date.now()}.mp4`,
-        videoFile,
-        {
-          access: "public",
-          handleUploadUrl: "/api/blob",
-        }
-      );
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: form,
+      });
 
-      const payload = {
-        country: selectedCountry.name,
-        uploader: user.name || "",
-        email: user.email || "",
-        videoUrl: blob.url,
-        status: "pending",
-        createdAt: Date.now(),
-      };
-
-      await setDoc(doc(db, "backflips", selectedCountry.code), payload);
-
-      setSubmissions((p) => ({
-        ...p,
-        [selectedCountry.code]: payload,
-      }));
-
+      if (!res.ok) throw new Error("Upload failed");
       closeModal();
-    } catch (err) {
-      setError(err.message || "Upload failed");
+    } catch (e) {
+      setError(e.message);
     } finally {
       setUploading(false);
     }
   };
+
 
   /* =====================
    * ADMIN ACTIONS
@@ -251,110 +235,110 @@ export default function BackflipTracker() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-300 via-purple-200 to-blue-200 p-6">
-      {/* HEADER */}
-      <div className="flex justify-between bg-white/80 rounded-2xl p-4 mb-4">
-        <div className="flex gap-2 items-center">
-          <Globe /> <b>Global Backflip Tracker</b>
-        </div>
-        <div className="flex gap-2 items-center">
-          {!user && <button onClick={login}>Sign in</button>}
-          {user && (
-            <>
-              {isAdmin && (
-                <button
-                  onClick={() => setShowAdmin((v) => !v)}
-                  className="px-3 py-1 rounded-xl bg-emerald-600 text-white flex gap-1"
-                >
-                  <ShieldCheck className="w-4 h-4" /> Admin
-                </button>
-              )}
-              <button onClick={logout}><LogOut /></button>
-            </>
-          )}
-        </div>
-      </div>
+    {/* HEADER */}
+    <div className="flex justify-between bg-white/80 rounded-2xl p-4 mb-4">
+    <div className="flex gap-2 items-center">
+    <Globe /> <b>Global Backflip Tracker</b>
+    </div>
+    <div className="flex gap-2 items-center">
+    {!user && <button onClick={login}>Sign in</button>}
+    {user && (
+      <>
+      {isAdmin && (
+        <button
+        onClick={() => setShowAdmin((v) => !v)}
+        className="px-3 py-1 rounded-xl bg-emerald-600 text-white flex gap-1"
+        >
+        <ShieldCheck className="w-4 h-4" /> Admin
+        </button>
+      )}
+      <button onClick={logout}><LogOut /></button>
+      </>
+    )}
+    </div>
+    </div>
 
-      {/* SEARCH */}
-      <div className="bg-white rounded-xl p-3 mb-4 flex gap-2">
-        <Search />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search country"
-          className="flex-1"
+    {/* SEARCH */}
+    <div className="bg-white rounded-xl p-3 mb-4 flex gap-2">
+    <Search />
+    <input
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+    placeholder="Search country"
+    className="flex-1"
+    />
+    </div>
+
+    {/* STATS */}
+    <div className="grid grid-cols-3 gap-4 mb-4">
+    <Stat label="Approved" value={approvedCount} />
+    <Stat label="Total Countries" value={totalCount} />
+    <Stat label="Completion" value={`${completionPercent}%`} />
+    </div>
+
+    {/* MAP */}
+    <div className="bg-white rounded-2xl p-4">
+    <ComposableMap projectionConfig={{ scale: 155 }}>
+    <Geographies geography={topo}>
+    {({ geographies }) =>
+    geographies.map((geo) => {
+      const code = String(geo.id);
+      const entry = submissions[code];
+      let fill = "#c7d2fe";
+      if (entry?.status === "approved") fill = "#34d399";
+      if (entry?.status === "pending") fill = "#facc15";
+      return (
+        <Geography
+        key={geo.rsmKey}
+        geography={geo}
+        fill={fill}
+        onClick={() =>
+          openCountry(code, geo.properties?.name || "")
+        }
         />
-      </div>
+      );
+    })
+    }
+    </Geographies>
+    </ComposableMap>
+    </div>
 
-      {/* STATS */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <Stat label="Approved" value={approvedCount} />
-        <Stat label="Total Countries" value={totalCount} />
-        <Stat label="Completion" value={`${completionPercent}%`} />
-      </div>
-
-      {/* MAP */}
-      <div className="bg-white rounded-2xl p-4">
-        <ComposableMap projectionConfig={{ scale: 155 }}>
-          <Geographies geography={topo}>
-            {({ geographies }) =>
-              geographies.map((geo) => {
-                const code = String(geo.id);
-                const entry = submissions[code];
-                let fill = "#c7d2fe";
-                if (entry?.status === "approved") fill = "#34d399";
-                if (entry?.status === "pending") fill = "#facc15";
-                return (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill={fill}
-                    onClick={() =>
-                      openCountry(code, geo.properties?.name || "")
-                    }
-                  />
-                );
-              })
-            }
-          </Geographies>
-        </ComposableMap>
-      </div>
-
-      {/* MODAL */}
-      {showModal && selectedCountry && (
-        <Modal title={selectedCountry.name} onClose={closeModal}>
-          {error && <p className="text-red-600">{error}</p>}
-          {!submissions[selectedCountry.code] && (
-            <>
-              <input type="file" accept="video/*" onChange={handleFile} />
-              <button
-                disabled={uploading}
-                onClick={submitForApproval}
-                className="w-full bg-indigo-600 text-white rounded-xl p-3 mt-2"
-              >
-                {uploading ? "Uploading…" : "Submit"}
-              </button>
-            </>
-          )}
-        </Modal>
+    {/* MODAL */}
+    {showModal && selectedCountry && (
+      <Modal title={selectedCountry.name} onClose={closeModal}>
+      {error && <p className="text-red-600">{error}</p>}
+      {!submissions[selectedCountry.code] && (
+        <>
+        <input type="file" accept="video/*" onChange={handleFile} />
+        <button
+        disabled={uploading}
+        onClick={submitForApproval}
+        className="w-full bg-indigo-600 text-white rounded-xl p-3 mt-2"
+        >
+        {uploading ? "Uploading…" : "Submit"}
+        </button>
+        </>
       )}
+      </Modal>
+    )}
 
-      {/* ADMIN PANEL */}
-      {showAdmin && isAdmin && (
-        <Modal title="Admin Panel" onClose={() => setShowAdmin(false)}>
-          {Object.entries(submissions)
-            .filter(([, s]) => s.status === "pending")
-            .map(([code, s]) => (
-              <div key={code} className="border rounded-xl p-3 mb-3">
-                <b>{s.country}</b>
-                <video src={s.videoUrl} controls className="w-full my-2" />
-                <div className="flex gap-2">
-                  <AdminBtn ok onClick={() => approve(code)}>Approve</AdminBtn>
-                  <AdminBtn onClick={() => reject(code)}>✕ Reject</AdminBtn>
-                </div>
-              </div>
-            ))}
+    {/* ADMIN PANEL */}
+    {showAdmin && isAdmin && (
+      <Modal title="Admin Panel" onClose={() => setShowAdmin(false)}>
+      {Object.entries(submissions)
+        .filter(([, s]) => s.status === "pending")
+        .map(([code, s]) => (
+          <div key={code} className="border rounded-xl p-3 mb-3">
+          <b>{s.country}</b>
+          <video src={s.videoUrl} controls className="w-full my-2" />
+          <div className="flex gap-2">
+          <AdminBtn ok onClick={() => approve(code)}>Approve</AdminBtn>
+          <AdminBtn onClick={() => reject(code)}>✕ Reject</AdminBtn>
+          </div>
+          </div>
+        ))}
         </Modal>
-      )}
+    )}
     </div>
   );
 }
@@ -364,32 +348,32 @@ export default function BackflipTracker() {
  * ===================== */
 const Stat = ({ label, value }) => (
   <div className="bg-white rounded-xl p-4">
-    <div className="text-xs text-gray-500">{label}</div>
-    <div className="text-2xl font-bold">{value}</div>
+  <div className="text-xs text-gray-500">{label}</div>
+  <div className="text-2xl font-bold">{value}</div>
   </div>
 );
 
 const AdminBtn = ({ ok, children, ...p }) => (
   <button
-    {...p}
-    className={`flex-1 py-2 rounded-xl font-semibold ${
-      ok ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
-    }`}
+  {...p}
+  className={`flex-1 py-2 rounded-xl font-semibold ${
+    ok ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+  }`}
   >
-    {children}
+  {children}
   </button>
 );
 
 function Modal({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center">
-      <div className="bg-white rounded-2xl p-4 max-w-lg w-full">
-        <div className="flex justify-between mb-2">
-          <b>{title}</b>
-          <button onClick={onClose}><X /></button>
-        </div>
-        {children}
-      </div>
+    <div className="bg-white rounded-2xl p-4 max-w-lg w-full">
+    <div className="flex justify-between mb-2">
+    <b>{title}</b>
+    <button onClick={onClose}><X /></button>
+    </div>
+    {children}
+    </div>
     </div>
   );
 }
