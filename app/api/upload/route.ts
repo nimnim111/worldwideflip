@@ -1,3 +1,4 @@
+console.log("UPLOAD API HIT");
 import { NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
