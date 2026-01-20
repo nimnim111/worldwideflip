@@ -193,6 +193,17 @@ export default function BackflipTracker() {
 if (!signRes.ok) throw new Error("Failed to sign upload");
 
 const { uploadUrl, path } = await signRes.json();
+const uploadRes = await fetch(uploadUrl, {
+  method: "PUT",
+  headers: {
+    "Content-Type": videoFile.type,
+  },
+  body: videoFile,
+});
+
+if (!uploadRes.ok) {
+  throw new Error("Upload to storage failed");
+}
 
 
 
