@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import { Globe, Search, LogOut, ShieldCheck, X } from "lucide-react";
 import { feature } from "topojson-client";
+import { supabase } from "./lib/supabase";
 /* =====================
  * FIREBASE (AUTH + FIRESTORE)
  * ===================== */
@@ -182,45 +183,30 @@ export default function BackflipTracker() {
    * SUBMIT (DIRECT TO BLOB)
    * ===================== */
 const submitForApproval = async () => {
-  if (!user) return setError("Please sign in first");
-  if (!videoFile) return setError("Please select a video file");
-  if (!selectedCountry) return setError("No country selected");
+  if (!user) return setError("Please sign in");
+  if (!videoFile) return setError("Select a video");
+  if (!selectedCountry) return setError("Select a country");
 
   setUploading(true);
   setError("");
 
   try {
-    // 1️⃣ Sign upload
-    const signRes = await fetch("/api/sign-upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        countryCode: selectedCountry.code,
-        fileType: videoFile.type,
-      }),
-    });
+    const path = `${selectedCountry.code}/${Date.now()}.mp4`;
 
-    if (!signRes.ok) {
-      throw new Error(await signRes.text());
-    }
+    const { error: uploadError } = await supabase.storage
+      .from("backflips")
+      .upload(path, videoFile, {
+        contentType: videoFile.type,
+        upsert: false,
+      });
 
-    const { uploadUrl, path } = await signRes.json();
+    if (uploadError) throw uploadError;
 
-    // 2️⃣ Upload directly to Supabase (CORRECT)
-    const formData = new FormData();
-    formData.append("file", videoFile);
+    const { data } = supabase.storage
+      .from("backflips")
+      .getPublicUrl(path);
 
-    const uploadRes = await fetch(uploadUrl, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!uploadRes.ok) {
-      throw new Error("Upload to storage failed");
-    }
-
-    // 3️⃣ Save metadata
-    const metaRes = await fetch("/api/submit-metadata", {
+    await fetch("/api/submit-metadata", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -228,17 +214,13 @@ const submitForApproval = async () => {
         countryName: selectedCountry.name,
         uploader: user.name,
         email: user.email,
-        path,
+        videoUrl: data.publicUrl,
       }),
     });
 
-    if (!metaRes.ok) {
-      throw new Error(await metaRes.text());
-    }
-
     closeModal();
   } catch (err) {
-    console.error("UPLOAD ERROR:", err);
+    console.error(err);
     setError(err.message || "Upload failed");
   } finally {
     setUploading(false);
