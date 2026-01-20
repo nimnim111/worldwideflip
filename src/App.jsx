@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import { Globe, Search, LogOut, ShieldCheck, X } from "lucide-react";
 import { feature } from "topojson-client";
-import { upload } from "@vercel/blob/client";
-
 /* =====================
  * FIREBASE (AUTH + FIRESTORE)
  * ===================== */
@@ -184,7 +182,10 @@ export default function BackflipTracker() {
    * SUBMIT (DIRECT TO BLOB)
    * ===================== */
   const submitForApproval = async () => {
-    if (!user || !videoFile || !selectedCountry) return;
+  if (!user || !videoFile || !selectedCountry) return;
+
+  try {
+    console.log("SUBMIT CLICKED");
 
     const form = new FormData();
     form.append("video", videoFile);
@@ -193,22 +194,32 @@ export default function BackflipTracker() {
     form.append("email", user.email);
     form.append("uploader", user.name);
 
-    setUploading(true);
+    console.log("SENDING REQUEST");
 
-    try {
-      const res = await fetch("/api/upload", {
+    const res = await fetch(
+      `${window.location.origin}/api/upload`,
+      {
         method: "POST",
         body: form,
-      });
+      }
+    );
 
-      if (!res.ok) throw new Error("Upload failed");
-      closeModal();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setUploading(false);
+    console.log("RESPONSE STATUS:", res.status);
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Upload failed");
     }
-  };
+
+    closeModal();
+  } catch (e) {
+    console.error("UPLOAD CLIENT ERROR:", e);
+    setError(e.message || "Upload failed");
+  } finally {
+    setUploading(false);
+  }
+};
+
 
 
   /* =====================
