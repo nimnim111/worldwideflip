@@ -20,12 +20,15 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   let videoType = "video/mp4";
   let fields: Record<string, string> = {};
 
-  bb.on("file", (_, file, info) => {
+  bb.on("file", (_name, file, info) => {
+    console.log("FILE RECEIVED:", info.filename);
     videoType = info.mimeType || "video/mp4";
+
     const chunks: Buffer[] = [];
     file.on("data", (d) => chunks.push(d));
     file.on("end", () => {
       videoBuffer = Buffer.concat(chunks);
+      console.log("FILE SIZE:", videoBuffer.length);
     });
   });
 
@@ -36,6 +39,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   bb.on("finish", async () => {
     try {
       if (!videoBuffer) {
+        console.error("NO FILE BUFFER");
         return res.status(400).send("No video uploaded");
       }
 
@@ -91,3 +95,10 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   req.pipe(bb);
 }
+
+/* 🔴 REQUIRED FOR BUSBOY */
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
