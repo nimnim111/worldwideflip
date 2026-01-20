@@ -1,10 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
-/**
- * Supabase server client (SERVICE ROLE)
- * ⚠️ Never expose this key to the browser
- */
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -19,30 +15,25 @@ export default async function handler(
   }
 
   try {
-    const { countryCode, fileType } = req.body;
+    const { countryCode } = req.body;
 
-    if (!countryCode || !fileType) {
-      return res.status(400).json({ error: "Missing fields" });
+    if (!countryCode) {
+      return res.status(400).json({ error: "Missing countryCode" });
     }
 
-    // Path inside Supabase Storage bucket
     const path = `${countryCode}/${Date.now()}.mp4`;
 
-    /**
-     * Create signed upload URL
-     * This MUST return a FULL https:// URL
-     */
     const { data, error } = await supabase.storage
       .from("backflips")
       .createSignedUploadUrl(path);
 
     if (error || !data?.signedUrl) {
-      console.error("SIGN ERROR:", error);
-      return res.status(500).json({ error: "Failed to sign upload" });
+      console.error("SIGN-UPLOAD ERROR:", error);
+      return res.status(500).json({ error: "Failed to create signed upload URL" });
     }
 
     return res.status(200).json({
-      uploadUrl: data.signedUrl, // ✅ FULL URL
+      uploadUrl: data.signedUrl, // ✅ FULL https:// URL
       path,
     });
   } catch (err) {
