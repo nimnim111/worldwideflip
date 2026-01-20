@@ -201,17 +201,19 @@ const submitForApproval = async () => {
       throw new Error(signError.error || "Failed to sign upload");
     }
 
-    const { path, uploadUrl } = await signResponse.json();
+    const { path, token } = await signResponse.json();
+
+    const { error: uploadError } = await supabase.storage
+      .from("backflips")
+      .uploadToSignedUrl(path, token, videoFile, {
+        contentType: videoFile.type,
+      });
 
     const uploadResponse = await fetch(uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": videoFile.type },
       body: videoFile,
     });
-
-    if (!uploadResponse.ok) {
-      throw new Error("Upload failed");
-    }
 
     await fetch("/api/submit-metadata", {
       method: "POST",
