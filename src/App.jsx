@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import { Globe, Search, LogOut, ShieldCheck, X } from "lucide-react";
 import { feature } from "topojson-client";
-import { supabase } from "./lib/supabase";
+
 /* =====================
- * FIREBASE (AUTH + FIRESTORE)
+ *   FIREBASE (AUTH + FIRESTORE)
  * ===================== */
 import { initializeApp } from "firebase/app";
 import {
@@ -24,9 +24,6 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 
-/* =====================
- * FIREBASE CONFIG
- * ===================== */
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -40,14 +37,14 @@ const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
 /* =====================
- * CONFIG
+ *   CONFIG
  * ===================== */
 const GEO_URL = "https://unpkg.com/world-atlas@2/countries-110m.json";
 const ADMIN_EMAILS = ["ardenwoodso2017@gmail.com"];
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 
 /* =====================
- * HELPERS
+ *   HELPERS
  * ===================== */
 function extractCountriesFromTopo(topo) {
   try {
@@ -62,7 +59,7 @@ function extractCountriesFromTopo(topo) {
 }
 
 /* =====================
- * MAIN
+ *   MAIN
  * ===================== */
 export default function BackflipTracker() {
   const [topo, setTopo] = useState(null);
@@ -82,15 +79,11 @@ export default function BackflipTracker() {
   const [error, setError] = useState("");
 
   /* =====================
-   * AUTH
-   * ===================== */
+   *     AUTH
+   *  ===================== */
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
-      if (!u) {
-        setUser(null);
-        setShowAdmin(false);
-        return;
-      }
+      if (!u) return setUser(null);
       setUser({
         uid: u.uid,
         name: u.displayName || "",
@@ -105,8 +98,8 @@ export default function BackflipTracker() {
   const logout = () => signOut(auth);
 
   /* =====================
-   * MAP + DATA
-   * ===================== */
+   *     MAP + DATA
+   *  ===================== */
   useEffect(() => {
     (async () => {
       const res = await fetch(GEO_URL);
@@ -129,8 +122,8 @@ export default function BackflipTracker() {
   }, []);
 
   /* =====================
-   * STATS
-   * ===================== */
+   *     STATS
+   *  ===================== */
   const approvedCount = useMemo(
     () => Object.values(submissions).filter((s) => s.status === "approved").length,
                                 [submissions]
@@ -146,8 +139,8 @@ export default function BackflipTracker() {
   }, [search, countries]);
 
   /* =====================
-   * COUNTRY CLICK
-   * ===================== */
+   *     COUNTRY CLICK
+   *  ===================== */
   const openCountry = (code, name) => {
     setSelectedCountry({ code, name });
     setVideoFile(null);
@@ -163,8 +156,8 @@ export default function BackflipTracker() {
   };
 
   /* =====================
-   * FILE VALIDATION
-   * ===================== */
+   *     FILE VALIDATION
+   *  ===================== */
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -180,62 +173,76 @@ export default function BackflipTracker() {
   };
 
   /* =====================
-   * SUBMIT (DIRECT TO BLOB)
-   * ===================== */
-const submitForApproval = async () => {
-  if (!user) return setError("Please sign in");
-  if (!videoFile) return setError("Select a video");
-  if (!selectedCountry) return setError("Select a country");
+   *     SUBMIT → VERCEL BLOB
+   *  ===================== */
+  const submitForApproval = async () => {
+    if (!user) return setError("Sign in required");
+    if (!videoFile) return setError("Select a video");
+    if (!selectedCountry) return;
+    if (submissions[selectedCountry.code])
+      return setError("Already submitted");
 
-  setUploading(true);
-  setError("");
+    setUploading(true);
+    setError("");
 
-  try {
-    const signResponse = await fetch("/api/sign-upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ countryCode: selectedCountry.code }),
-    });
-
-    if (!signResponse.ok) {
-      const signError = await signResponse.json();
-      throw new Error(signError.error || "Failed to sign upload");
-    }
-
-    const { path, token } = await signResponse.json();
-
-    const { error: uploadError } = await supabase.storage
-      .from("backflips")
-      .uploadToSignedUrl(path, token, videoFile, {
-        contentType: videoFile.type,
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": videoFile.type,
+        },
+        body: videoFile,
       });
 
-    if (uploadError) throw uploadError;
+      // 🔐 SAFE RESPONSE HANDLING
+      const raw = await res.text();
 
-    await fetch("/api/submit-metadata", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        countryCode: selectedCountry.code,
-        countryName: selectedCountry.name,
-        uploader: user.name,
-        email: user.email,
-        path,
-      }),
-    });
+      if (!res.ok) {
+        throw new Error(raw || "Upload failed");
+      }
 
-    closeModal();
-  } catch (err) {
-    console.error(err);
-    setError(err.message || "Upload failed");
-  } finally {
-    setUploading(false);
-  }
-};
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error("Upload API returned invalid or empty JSON");
+      }
+
+      if (!parsed?.url) {
+        throw new Error("Upload succeeded but no URL returned");
+      }
+
+      const payload = {
+        country: selectedCountry.name,
+        uploader: user.name || "",
+        email: user.email || "",
+        videoUrl: parsed.url,
+        status: "pending",
+        createdAt: Date.now(),
+      };
+
+      await setDoc(
+        doc(db, "backflips", selectedCountry.code),
+                   payload
+      );
+
+      setSubmissions((p) => ({
+        ...p,
+        [selectedCountry.code]: payload,
+      }));
+
+      closeModal();
+    } catch (err) {
+      setError(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
 
   /* =====================
-   * ADMIN ACTIONS
-   * ===================== */
+   *     ADMIN ACTIONS
+   *  ===================== */
   const approve = async (code) => {
     await updateDoc(doc(db, "backflips", code), { status: "approved" });
     setSubmissions((p) => ({
@@ -366,7 +373,7 @@ const submitForApproval = async () => {
 }
 
 /* =====================
- * UI HELPERS
+ *   UI HELPERS
  * ===================== */
 const Stat = ({ label, value }) => (
   <div className="bg-white rounded-xl p-4">
