@@ -8,6 +8,8 @@ const supabase = createClient(
 );
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
+  console.log("UPLOAD FUNCTION LOADED");
+
   if (req.method !== "POST") {
     return res.status(405).send("Method not allowed");
   }
@@ -51,12 +53,10 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
       const filePath = `${countryCode}/${Date.now()}.mp4`;
 
-      // 1️⃣ Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from("backflips")
         .upload(filePath, videoBuffer, {
           contentType: videoType,
-          upsert: false,
         });
 
       if (uploadError) {
@@ -64,12 +64,10 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).send(uploadError.message);
       }
 
-      // 2️⃣ Get public URL
       const { data } = supabase.storage
         .from("backflips")
         .getPublicUrl(filePath);
 
-      // 3️⃣ Insert metadata
       const { error: dbError } = await supabase
         .from("backflip_videos")
         .insert({
@@ -95,10 +93,3 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   req.pipe(bb);
 }
-
-/* 🔴 REQUIRED FOR BUSBOY */
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
