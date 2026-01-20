@@ -207,9 +207,6 @@ const submitForApproval = async () => {
   setError("");
 
   try {
-    /* =========================
-     * 1️⃣ SIGN UPLOAD
-     * ========================= */
     const signRes = await fetch("/api/sign-upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -226,14 +223,9 @@ const submitForApproval = async () => {
 
     const { uploadUrl, path } = await signRes.json();
 
-    /* =========================
-     * 2️⃣ DIRECT UPLOAD TO SUPABASE
-     * ========================= */
     const uploadRes = await fetch(uploadUrl, {
       method: "PUT",
-      headers: {
-        "Content-Type": videoFile.type,
-      },
+      headers: { "Content-Type": videoFile.type },
       body: videoFile,
     });
 
@@ -241,9 +233,6 @@ const submitForApproval = async () => {
       throw new Error("Upload to storage failed");
     }
 
-    /* =========================
-     * 3️⃣ SAVE METADATA
-     * ========================= */
     const metaRes = await fetch("/api/submit-metadata", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -269,8 +258,7 @@ const submitForApproval = async () => {
     setUploading(false);
   }
 };
-w new Error("Upload to storage failed");
-}
+
 
 
 
