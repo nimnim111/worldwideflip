@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import { Globe, Search, LogOut, ShieldCheck, X } from "lucide-react";
 import { feature } from "topojson-client";
-import { supabase } from "./lib/supabase";
 /* =====================
  * FIREBASE (AUTH + FIRESTORE)
  * ===================== */
@@ -191,20 +190,28 @@ const submitForApproval = async () => {
   setError("");
 
   try {
-    const path = `${selectedCountry.code}/${Date.now()}.mp4`;
+    const signResponse = await fetch("/api/sign-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ countryCode: selectedCountry.code }),
+    });
 
-    const { error: uploadError } = await supabase.storage
-      .from("backflips")
-      .upload(path, videoFile, {
-        contentType: videoFile.type,
-        upsert: false,
-      });
+    if (!signResponse.ok) {
+      const signError = await signResponse.json();
+      throw new Error(signError.error || "Failed to sign upload");
+    }
 
-    if (uploadError) throw uploadError;
+    const { path, uploadUrl } = await signResponse.json();
 
-    const { data } = supabase.storage
-      .from("backflips")
-      .getPublicUrl(path);
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": videoFile.type },
+      body: videoFile,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error("Upload failed");
+    }
 
     await fetch("/api/submit-metadata", {
       method: "POST",
@@ -214,7 +221,7 @@ const submitForApproval = async () => {
         countryName: selectedCountry.name,
         uploader: user.name,
         email: user.email,
-        videoUrl: data.publicUrl,
+        path,
       }),
     });
 

@@ -35,6 +35,7 @@ export default async function handler(
     return res.status(200).json({
       uploadUrl: data.signedUrl, // ✅ FULL https:// URL
       path,
+      token: data.token,
     });
   } catch (err) {
     console.error("SIGN-UPLOAD CRASH:", err);
