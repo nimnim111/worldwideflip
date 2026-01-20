@@ -182,7 +182,7 @@ export default function BackflipTracker() {
    * SUBMIT (DIRECT TO BLOB)
    * ===================== */
   const submitForApproval = async () => {
-  if (!user || !videoFile || !selectedCountry) return;
+  if (!user) {   setError("Please sign in first");   return; }  if (!videoFile) {   setError("Please select a video file");   return; }  if (!selectedCountry) {   setError("No country selected");   return; }
 
   try {
     console.log("SUBMIT CLICKED");
