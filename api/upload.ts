@@ -33,5 +33,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.json({
     uploadUrl: data.signedUrl,
     path,
+    token: data.token,
   });
 }

@@ -191,20 +191,26 @@ const submitForApproval = async () => {
   setError("");
 
   try {
-    const path = `${selectedCountry.code}/${Date.now()}.mp4`;
+    const signResponse = await fetch("/api/sign-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ countryCode: selectedCountry.code }),
+    });
+
+    if (!signResponse.ok) {
+      const signError = await signResponse.json();
+      throw new Error(signError.error || "Failed to sign upload");
+    }
+
+    const { path, token } = await signResponse.json();
 
     const { error: uploadError } = await supabase.storage
       .from("backflips")
-      .upload(path, videoFile, {
+      .uploadToSignedUrl(path, token, videoFile, {
         contentType: videoFile.type,
-        upsert: false,
       });
 
     if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage
-      .from("backflips")
-      .getPublicUrl(path);
 
     await fetch("/api/submit-metadata", {
       method: "POST",
@@ -214,7 +220,7 @@ const submitForApproval = async () => {
         countryName: selectedCountry.name,
         uploader: user.name,
         email: user.email,
-        videoUrl: data.publicUrl,
+        path,
       }),
     });
 
