@@ -21,9 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data, error } = await supabase.storage
     .from("backflips")
-    .createSignedUploadUrl(path, {
-      contentType: fileType,
-    });
+    .createSignedUploadUrl(path);
 
   if (error) {
     console.error(error);

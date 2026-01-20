@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import { Globe, Search, LogOut, ShieldCheck, X } from "lucide-react";
 import { feature } from "topojson-client";
-import { supabase } from "./lib/supabase";
 /* =====================
  * FIREBASE (AUTH + FIRESTORE)
  * ===================== */
@@ -210,7 +209,11 @@ const submitForApproval = async () => {
         contentType: videoFile.type,
       });
 
-    if (uploadError) throw uploadError;
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": videoFile.type },
+      body: videoFile,
+    });
 
     await fetch("/api/submit-metadata", {
       method: "POST",
