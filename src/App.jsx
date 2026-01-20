@@ -182,19 +182,37 @@ export default function BackflipTracker() {
    * SUBMIT (DIRECT TO BLOB)
    * ===================== */
   const submitForApproval = async () => {
-  if (!user) {   setError("Please sign in first");   return; }  if (!videoFile) {   setError("Please select a video file");   return; }  if (!selectedCountry) {   setError("No country selected");   return; }
+  console.log("SUBMIT CLICKED", {
+    user,
+    videoFile,
+    selectedCountry,
+  });
+
+  if (!user) {
+    setError("Please sign in first");
+    return;
+  }
+
+  if (!videoFile) {
+    setError("Please select a video file");
+    return;
+  }
+
+  if (!selectedCountry) {
+    setError("No country selected");
+    return;
+  }
+
+  setUploading(true);
+  setError("");
 
   try {
-    console.log("SUBMIT CLICKED");
-
     const form = new FormData();
     form.append("video", videoFile);
     form.append("countryCode", selectedCountry.code);
     form.append("countryName", selectedCountry.name);
     form.append("email", user.email);
     form.append("uploader", user.name);
-
-    console.log("SENDING REQUEST");
 
     const res = await fetch(
       `${window.location.origin}/api/upload`,
@@ -204,8 +222,6 @@ export default function BackflipTracker() {
       }
     );
 
-    console.log("RESPONSE STATUS:", res.status);
-
     if (!res.ok) {
       const text = await res.text();
       throw new Error(text || "Upload failed");
@@ -213,7 +229,7 @@ export default function BackflipTracker() {
 
     closeModal();
   } catch (e) {
-    console.error("UPLOAD CLIENT ERROR:", e);
+    console.error("UPLOAD ERROR:", e);
     setError(e.message || "Upload failed");
   } finally {
     setUploading(false);
