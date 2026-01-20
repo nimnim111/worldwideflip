@@ -23,7 +23,6 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   bb.on("file", (_, file, info) => {
     videoType = info.mimeType || "video/mp4";
     const chunks: Buffer[] = [];
-
     file.on("data", (d) => chunks.push(d));
     file.on("end", () => {
       videoBuffer = Buffer.concat(chunks);
@@ -40,12 +39,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).send("No video uploaded");
       }
 
-      const {
-        countryCode,
-        countryName,
-        email,
-        uploader,
-      } = fields;
+      const { countryCode, countryName, email, uploader } = fields;
 
       if (!countryCode || !email) {
         return res.status(400).send("Missing fields");
@@ -53,7 +47,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
       const filePath = `${countryCode}/${Date.now()}.mp4`;
 
-      /* 1️⃣ Upload to Supabase Storage */
+      // 1️⃣ Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from("backflips")
         .upload(filePath, videoBuffer, {
@@ -66,12 +60,12 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).send(uploadError.message);
       }
 
-      /* 2️⃣ Get public URL */
+      // 2️⃣ Get public URL
       const { data } = supabase.storage
         .from("backflips")
         .getPublicUrl(filePath);
 
-      /* 3️⃣ Insert metadata into Postgres */
+      // 3️⃣ Insert metadata
       const { error: dbError } = await supabase
         .from("backflip_videos")
         .insert({
@@ -89,5 +83,11 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       return res.json({ url: data.publicUrl });
-    } catch (err: any) {
+    } catch (err) {
       console.error("UPLOAD CRASH:", err);
+      return res.status(500).send("Server error");
+    }
+  });
+
+  req.pipe(bb);
+}
