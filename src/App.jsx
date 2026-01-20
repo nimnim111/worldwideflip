@@ -182,31 +182,15 @@ export default function BackflipTracker() {
    * SUBMIT (DIRECT TO BLOB)
    * ===================== */
 const submitForApproval = async () => {
-  console.log("SUBMIT CLICKED", {
-    user,
-    videoFile,
-    selectedCountry,
-  });
-
-  if (!user) {
-    setError("Please sign in first");
-    return;
-  }
-
-  if (!videoFile) {
-    setError("Please select a video file");
-    return;
-  }
-
-  if (!selectedCountry) {
-    setError("No country selected");
-    return;
-  }
+  if (!user) return setError("Please sign in first");
+  if (!videoFile) return setError("Please select a video file");
+  if (!selectedCountry) return setError("No country selected");
 
   setUploading(true);
   setError("");
 
   try {
+    // 1️⃣ Sign upload
     const signRes = await fetch("/api/sign-upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -217,22 +201,25 @@ const submitForApproval = async () => {
     });
 
     if (!signRes.ok) {
-      const t = await signRes.text();
-      throw new Error(t || "Failed to sign upload");
+      throw new Error(await signRes.text());
     }
 
     const { uploadUrl, path } = await signRes.json();
 
+    // 2️⃣ Upload directly to Supabase (CORRECT)
+    const formData = new FormData();
+    formData.append("file", videoFile);
+
     const uploadRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": videoFile.type },
-      body: videoFile,
+      method: "POST",
+      body: formData,
     });
 
     if (!uploadRes.ok) {
       throw new Error("Upload to storage failed");
     }
 
+    // 3️⃣ Save metadata
     const metaRes = await fetch("/api/submit-metadata", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -246,8 +233,7 @@ const submitForApproval = async () => {
     });
 
     if (!metaRes.ok) {
-      const t = await metaRes.text();
-      throw new Error(t || "Failed to save metadata");
+      throw new Error(await metaRes.text());
     }
 
     closeModal();
@@ -258,9 +244,6 @@ const submitForApproval = async () => {
     setUploading(false);
   }
 };
-
-
-
 
   /* =====================
    * ADMIN ACTIONS
