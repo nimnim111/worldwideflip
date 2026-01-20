@@ -181,28 +181,95 @@ export default function BackflipTracker() {
   /* =====================
    * SUBMIT (DIRECT TO BLOB)
    * ===================== */
-  const signRes = await fetch("/api/sign-upload", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    countryCode: selectedCountry.code,
-    fileType: videoFile.type,
-  }),
-});
+const submitForApproval = async () => {
+  console.log("SUBMIT CLICKED", {
+    user,
+    videoFile,
+    selectedCountry,
+  });
 
-if (!signRes.ok) throw new Error("Failed to sign upload");
+  if (!user) {
+    setError("Please sign in first");
+    return;
+  }
 
-const { uploadUrl, path } = await signRes.json();
-const uploadRes = await fetch(uploadUrl, {
-  method: "PUT",
-  headers: {
-    "Content-Type": videoFile.type,
-  },
-  body: videoFile,
-});
+  if (!videoFile) {
+    setError("Please select a video file");
+    return;
+  }
 
-if (!uploadRes.ok) {
-  throw new Error("Upload to storage failed");
+  if (!selectedCountry) {
+    setError("No country selected");
+    return;
+  }
+
+  setUploading(true);
+  setError("");
+
+  try {
+    /* =========================
+     * 1️⃣ SIGN UPLOAD
+     * ========================= */
+    const signRes = await fetch("/api/sign-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        countryCode: selectedCountry.code,
+        fileType: videoFile.type,
+      }),
+    });
+
+    if (!signRes.ok) {
+      const t = await signRes.text();
+      throw new Error(t || "Failed to sign upload");
+    }
+
+    const { uploadUrl, path } = await signRes.json();
+
+    /* =========================
+     * 2️⃣ DIRECT UPLOAD TO SUPABASE
+     * ========================= */
+    const uploadRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": videoFile.type,
+      },
+      body: videoFile,
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error("Upload to storage failed");
+    }
+
+    /* =========================
+     * 3️⃣ SAVE METADATA
+     * ========================= */
+    const metaRes = await fetch("/api/submit-metadata", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        countryCode: selectedCountry.code,
+        countryName: selectedCountry.name,
+        uploader: user.name,
+        email: user.email,
+        path,
+      }),
+    });
+
+    if (!metaRes.ok) {
+      const t = await metaRes.text();
+      throw new Error(t || "Failed to save metadata");
+    }
+
+    closeModal();
+  } catch (err) {
+    console.error("UPLOAD ERROR:", err);
+    setError(err.message || "Upload failed");
+  } finally {
+    setUploading(false);
+  }
+};
+w new Error("Upload to storage failed");
 }
 
 
